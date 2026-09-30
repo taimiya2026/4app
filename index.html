@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>エレベーターで数字をまなぼう！</title>
+
+  <!-- iOS / iPadOS 用のPWA（ホーム画面追加）設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="エレベーター">
+  <link rel="apple-touch-icon" href="https://placehold.co/180x180/f59e0b/ffffff?text=🥩">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Kosugi Maru', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    /* エレベーターのドアアニメーション */
+    .door-left, .door-right {
+      transition: transform 1.2s ease-in-out;
+    }
+    .doors-open .door-left {
+      transform: translateX(-95%);
+    }
+    .doors-open .door-right {
+      transform: translateX(95%);
+    }
+
+    /* ボタンの立体感とライト効果 */
+    .btn-elevator {
+      box-shadow: 0 6px 0 #9ca3af, 0 10px 10px rgba(0, 0, 0, 0.15);
+      transition: all 0.1s ease;
+    }
+    .btn-elevator:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #9ca3af, 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .btn-elevator.active {
+      background-color: #fef08a !important;
+      color: #ea580c !important;
+      border-color: #f97316 !important;
+      box-shadow: 0 0 15px #fde047, inset 0 0 10px #facc15;
+      animation: pulse-border 1s infinite alternate;
+    }
+
+    @keyframes pulse-border {
+      from { border-color: #f97316; }
+      to { border-color: #ef4444; }
+    }
+
+    /* 液晶デジタル表示風 */
+    .digital-display {
+      font-family: 'Courier New', Courier, monospace;
+      text-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+    }
+  </style>
+</head>
+<body class="bg-slate-800 min-h-[100dvh] flex flex-col items-center justify-between p-2 sm:p-4 text-slate-800 overflow-x-hidden">
+
+  <!-- スタート画面 -->
+  <div id="start-overlay" class="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center shadow-2xl border-4 border-amber-400">
+      <div class="text-7xl mb-4 animate-bounce">🥩</div>
+      <h2 class="text-2xl sm:text-3xl font-black text-slate-800 mb-2">ハンバーグクイズ</h2>
+      <p class="text-slate-600 font-bold mb-6 text-sm sm:text-base">おと を だして あそぼう！</p>
+      <button onclick="startGame()" class="w-full py-4 bg-amber-400 hover:bg-amber-300 active:scale-95 text-amber-950 font-black text-2xl rounded-2xl shadow-lg border-b-4 border-amber-600 transition">
+        ▶ はじめる！
+      </button>
+    </div>
+  </div>
+
+  <!-- ヘッダー -->
+  <header class="w-full max-w-4xl flex justify-center items-center bg-slate-700/80 backdrop-blur p-3 rounded-2xl border-2 border-slate-600 mb-2 text-white shadow-lg">
+    <div class="flex items-center gap-2">
+      <span class="text-3xl">⭐</span>
+      <h1 class="text-xl sm:text-2xl font-bold tracking-wide text-amber-300">ハンバーグ すうじクイズ ⭐</h1>
+    </div>
+  </header>
+
+  <!-- クイズ指示バー -->
+  <div id="quiz-banner" class="w-full max-w-4xl bg-amber-100 border-4 border-amber-400 p-3 rounded-2xl text-center shadow-md mb-2 animate-bounce">
+    <p id="quiz-instruction" class="text-lg sm:text-2xl font-black text-amber-900">
+      「13」かい を おしてね！
+    </p>
+  </div>
+
+  <!-- メインコンテンツ (エレベーター＆パネル) -->
+  <main class="w-full max-w-4xl flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch">
+    
+    <!-- エレベーター本体 (左側/上側) -->
+    <div class="md:col-span-7 bg-slate-300 border-8 border-slate-400 rounded-3xl p-4 shadow-2xl flex flex-col justify-between relative overflow-hidden min-h-[360px]">
+      
+      <!-- 階数表示インジケーター -->
+      <div class="bg-black border-4 border-slate-500 rounded-2xl p-3 mb-3 flex items-center justify-between text-red-500 shadow-inner">
+        <div id="direction-arrow" class="text-2xl sm:text-3xl font-black opacity-30 transition-opacity">▲</div>
+        <div class="flex items-baseline gap-2">
+          <span id="display-number" class="digital-display text-5xl sm:text-6xl font-black tracking-widest">11</span>
+          <span class="text-xl sm:text-2xl font-bold text-red-400">階</span>
+        </div>
+        <div id="floor-name-display" class="text-sm sm:text-base text-amber-400 font-bold truncate max-w-[120px] sm:max-w-[160px] text-right">
+          チーズINハンバーグ
+        </div>
+      </div>
+
+      <!-- エレベーターのドアと中の景色 -->
+      <div class="relative flex-1 bg-amber-100 rounded-2xl border-4 border-slate-500 overflow-hidden min-h-[220px] flex items-center justify-center shadow-inner">
+        
+        <!-- ドアの中身 (各階のテーマビュー) -->
+        <div id="floor-view" class="absolute inset-0 flex flex-col items-center justify-center p-3 text-center transition-all duration-500">
+          <div class="relative mb-2 group flex justify-center items-center">
+            <!-- ハンバーグのSVGイラストを表示するコンテナ -->
+            <div id="svg-illustration-container" class="w-52 h-36 sm:w-64 sm:h-44 bg-amber-50 rounded-2xl shadow-xl border-4 border-white flex items-center justify-center p-1 overflow-hidden">
+              <!-- JSで動的にSVGイラストが差し込まれます -->
+            </div>
+            <span id="photo-badge" class="absolute bottom-2 right-2 bg-slate-900/80 text-amber-300 text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full backdrop-blur-sm font-bold shadow flex items-center gap-1">
+              <span>🎨 ファミレスのハンバーグイラスト</span>
+            </span>
+          </div>
+          <h2 id="floor-title" class="text-base sm:text-xl font-black text-slate-800 bg-white/90 px-4 py-1 rounded-full shadow">
+            11かい：チーズINハンバーグ
+          </h2>
+          <p id="floor-desc" class="text-xs sm:text-sm font-bold text-slate-700 mt-1 bg-white/75 px-3 py-1 rounded-lg">
+            とろ〜り チーズが あふれでる！だいにんき メニュー！
+          </p>
+        </div>
+
+        <!-- エレベーターのドア (左右) -->
+        <div id="doors-container" class="absolute inset-0 flex z-10 pointer-events-none">
+          <!-- 左ドア -->
+          <div class="door-left w-1/2 h-full bg-slate-400 border-r-2 border-slate-500 flex items-center justify-end pr-2 relative shadow-md">
+            <div class="w-2 h-16 bg-slate-600 rounded-full shadow"></div>
+            <div class="absolute inset-y-0 left-4 w-1 bg-slate-300/40"></div>
+          </div>
+          <!-- 右ドア -->
+          <div class="door-right w-1/2 h-full bg-slate-400 border-l-2 border-slate-500 flex items-center justify-start pl-2 relative shadow-md">
+            <div class="w-2 h-16 bg-slate-600 rounded-full shadow"></div>
+            <div class="absolute inset-y-0 right-4 w-1 bg-slate-300/40"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 到着メッセージ表示 -->
+      <div id="status-message" class="mt-3 text-center text-slate-700 font-bold text-sm sm:text-base h-6">
+        「13」かい を おしてね！
+      </div>
+    </div>
+
+    <!-- 操作パネル (右側/下側) -->
+    <div class="md:col-span-5 bg-amber-50 border-8 border-amber-200 rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col justify-between">
+      
+      <div class="text-center mb-3">
+        <h3 class="text-lg font-bold text-amber-900 border-b-2 border-amber-200 pb-1 inline-block">
+          🔘 こたえのボタンを押してね
+        </h3>
+      </div>
+
+      <!-- 階数ボタン (20〜11階) -->
+      <div class="grid grid-cols-2 gap-3 sm:gap-4 flex-1 my-auto">
+        <button onclick="pressButton(20)" id="btn-20" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>20</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(19)" id="btn-19" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>19</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(18)" id="btn-18" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>18</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(17)" id="btn-17" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>17</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(16)" id="btn-16" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>16</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(15)" id="btn-15" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>15</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(14)" id="btn-14" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>14</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(13)" id="btn-13" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>13</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(12)" id="btn-12" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>12</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+        <button onclick="pressButton(11)" id="btn-11" class="btn-elevator bg-white text-slate-800 border-4 border-slate-300 rounded-2xl py-3 font-black text-2xl sm:text-3xl flex items-center justify-center gap-2 hover:bg-slate-50 active:bg-amber-100">
+          <span>11</span><span class="text-xs sm:text-sm font-normal text-slate-500">階</span>
+        </button>
+      </div>
+
+      <!-- 開閉操作風の装飾ボタン -->
+      <div class="mt-4 pt-3 border-t-2 border-amber-200 flex justify-center gap-4">
+        <button onclick="manualDoorOpen()" class="px-4 py-2 bg-slate-200 border-2 border-slate-400 rounded-xl font-bold text-slate-700 text-sm active:bg-slate-300 shadow">
+          ◀ 🛗 ▶ あける
+        </button>
+        <button onclick="manualDoorClose()" class="px-4 py-2 bg-slate-200 border-2 border-slate-400 rounded-xl font-bold text-slate-700 text-sm active:bg-slate-300 shadow">
+          ▶ 🛗 ◀ しめる
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="mt-3 text-center text-xs text-slate-400 font-bold">
+    数字の学習アプリ - ハンバーグ エレベーターで遊ぼう！
+  </footer>
+
+  <script>
+    let isMoving = false;
+    let currentFloor = 11;
+    let quizTarget = 13;
+    let targetFloor = 11;
+
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          audioCtx = new AudioContext();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // 11階〜20階のハンバーグ詳細データ定義
+    const floorsData = {
+      11: { name: 'チーズINハンバーグ', desc: 'とろ〜り チーズが あふれでる！だいにんき メニュー！', bg: 'bg-amber-100' },
+      12: { name: 'めだまやきハンバーグ', desc: 'ぷるぷる たまごが のった にんき ハンバーグ！', bg: 'bg-yellow-100' },
+      13: { name: 'おろしポンずハンバーグ', desc: 'だいこんおろし で さっぱり おいしい！', bg: 'bg-emerald-100' },
+      14: { name: 'トマトモッツァレラハンバーグ', desc: 'あかい トマト と しろい チーズ の さわやか ハンバーグ！', bg: 'bg-rose-100' },
+      15: { name: 'アボカドチーズハンバーグ', desc: 'クリーミーな アボカド が たっぷり！', bg: 'bg-lime-100' },
+      16: { name: 'ハンバーグ＆エビフライ', desc: 'サクサク の エビフライ が ついた ぜいたく セット！', bg: 'bg-orange-100' },
+      17: { name: 'テリヤキマヨハンバーグ', desc: '甘からソース と マヨネーズ が ピッタリ！', bg: 'bg-amber-200' },
+      18: { name: 'ガーリックバターハンバーグ', desc: 'ニンニク と バター の こうばしい かおり！', bg: 'bg-stone-200' },
+      19: { name: 'ダブルチーズINハンバーグ', desc: 'チーズ たっぷり！ ボリューム まんてん ハンバーグ！', bg: 'bg-orange-200' },
+      20: { name: 'キッズハンバーグプレート', desc: 'はた が ついた たのしい おこさま プレート！', bg: 'bg-sky-100' }
+    };
+
+    // 各階に応じたファミリーレストラン風ハンバーグの高品質SVGイラストを生成する関数
+    function generateHamburgSVG(floor) {
+      // 共通ベース（鉄板・木の台座・野菜付け合わせ）
+      const woodBase = `<path d="M 20,130 Q 150,165 280,130 Q 285,145 280,150 Q 150,180 20,150 Z" fill="#8B4513" stroke="#5c2d0c" stroke-width="2"/>`;
+      const ironSkillet = `<ellipse cx="150" cy="130" rx="120" ry="30" fill="#2D3748" stroke="#1A202C" stroke-width="3"/>
+                           <ellipse cx="150" cy="128" rx="114" ry="26" fill="#4A5568"/>`;
+      
+      // 共通野菜（コーン・ブロッコリー・ポテト）
+      const sideVeggies = `
+        <!-- ブロッコリー -->
+        <circle cx="65" cy="115" r="12" fill="#22C55E"/>
+        <circle cx="58" cy="120" r="10" fill="#16A34A"/>
+        <circle cx="72" cy="120" r="10" fill="#15803D"/>
+        <!-- コーン -->
+        <ellipse cx="230" cy="125" rx="14" ry="8" fill="#FACC15"/>
+        <circle cx="225" cy="122" r="3" fill="#EAB308"/>
+        <circle cx="232" cy="126" r="3" fill="#EAB308"/>
+        <circle cx="236" cy="122" r="3" fill="#CA8A04"/>
+        <!-- ほくほくポテト -->
+        <rect x="205" y="105" width="12" height="20" rx="4" fill="#FDE047" transform="rotate(-15 205 105)" stroke="#EAB308"/>
+        <rect x="215" y="108" width="12" height="20" rx="4" fill="#FEF08A" transform="rotate(10 215 108)" stroke="#EAB308"/>
+      `;
+
+      // ハンバーグ本体（共通）
+      const pattyBase = `
+        <ellipse cx="150" cy="120" rx="55" ry="32" fill="#4A2511" stroke="#2C1408" stroke-width="2"/>
+        <ellipse cx="150" cy="117" rx="50" ry="27" fill="#6B3419"/>
+        <!-- 焼き目テカリ -->
+        <ellipse cx="135" cy="108" rx="20" ry="8" fill="#8C4623" opacity="0.6"/>
+      `;
+
+      // デミグラスソース（共通ベース）
+      const demiGlaceSauce = `
+        <path d="M 100,122 C 110,135 130,138 150,138 C 170,138 190,132 202,122 C 205,130 180,145 150,145 C 120,145 95,132 100,122 Z" fill="#3B1705" opacity="0.9"/>
+        <ellipse cx="150" cy="125" rx="42" ry="18" fill="#52230A"/>
+        <path d="M 120,118 Q 150,128 180,118 Q 160,123 150,124 Q 135,123 120,118 Z" fill="#803B14" opacity="0.8"/>
+      `;
+
+      let specificElements = "";
+
+      switch(floor) {
+        case 11: // チーズINハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase} ${demiGlaceSauce}
+            <!-- とろ〜りあふれるチーズ -->
+            <path d="M 130,120 Q 150,125 170,120 Q 180,135 160,142 Q 145,145 130,138 Q 120,130 130,120 Z" fill="#FACC15" stroke="#EAB308" stroke-width="2"/>
+            <path d="M 140,128 C 145,148 155,152 158,150 C 162,148 155,135 152,128 Z" fill="#FEF08A"/>
+            <ellipse cx="158" cy="150" rx="6" ry="3" fill="#FACC15"/>
+          `;
+          break;
+
+        case 12: // 目玉焼きハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase} ${demiGlaceSauce}
+            <!-- ぷるぷる目玉焼き -->
+            <ellipse cx="150" cy="112" rx="32" ry="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
+            <circle cx="150" cy="110" r="13" fill="#F97316"/>
+            <circle cx="150" cy="110" r="11" fill="#FACC15"/>
+            <circle cx="146" cy="106" r="3" fill="#FFFFFF" opacity="0.8"/>
+          `;
+          break;
+
+        case 13: // おろしポン酢ハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase}
+            <!-- 和風ポン酢ソース -->
+            <ellipse cx="150" cy="125" rx="45" ry="20" fill="#3F2E21" opacity="0.85"/>
+            <!-- 大葉 -->
+            <path d="M 125,115 Q 150,95 175,115 Q 150,125 125,115 Z" fill="#16A34A" stroke="#15803D"/>
+            <!-- 大根おろし -->
+            <ellipse cx="150" cy="112" rx="20" ry="10" fill="#F8FAFC" stroke="#E2E8F0"/>
+            <circle cx="145" cy="110" r="4" fill="#E2E8F0"/>
+            <circle cx="154" cy="113" r="5" fill="#E2E8F0"/>
+          `;
+          break;
+
+        case 14: // トマトモッツァレラハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase}
+            <!-- フレッシュトマトソース -->
+            <ellipse cx="150" cy="122" rx="48" ry="22" fill="#DC2626"/>
+            <circle cx="130" cy="125" r="5" fill="#EF4444"/>
+            <circle cx="168" cy="123" r="6" fill="#B91C1C"/>
+            <!-- とろけるモッツァレラ -->
+            <path d="M 125,112 Q 150,105 175,112 Q 170,124 150,125 Q 130,124 125,112 Z" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+            <!-- バジルバッチ -->
+            <circle cx="150" cy="110" r="4" fill="#22C55E"/>
+          `;
+          break;
+
+        case 15: // アボカドチーズハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase} ${demiGlaceSauce}
+            <!-- チェダーチーズ -->
+            <path d="M 115,112 L 185,112 L 175,125 L 125,125 Z" fill="#F59E0B"/>
+            <!-- アボカドスライス -->
+            <path d="M 125,108 Q 140,98 150,114 Q 135,118 125,108 Z" fill="#84CC16" stroke="#65A30D" stroke-width="1.5"/>
+            <path d="M 140,108 Q 155,98 165,114 Q 150,118 140,108 Z" fill="#65A30D" stroke="#4D7C0F" stroke-width="1.5"/>
+            <path d="M 155,108 Q 170,98 178,114 Q 165,118 155,108 Z" fill="#84CC16" stroke="#65A30D" stroke-width="1.5"/>
+          `;
+          break;
+
+        case 16: // ハンバーグ＆エビフライ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies}
+            <!-- ハンバーグは少し左にシフト -->
+            <g transform="translate(-15, 0)">
+              ${pattyBase} ${demiGlaceSauce}
+            </g>
+            <!-- サクサクエビフライ2本 -->
+            <g transform="translate(20, -5)">
+              <!-- エビフライ1 -->
+              <path d="M 155,115 Q 180,95 200,105 Q 185,120 155,115 Z" fill="#D97706" stroke="#B45309" stroke-width="2"/>
+              <path d="M 200,105 L 210,100 L 205,110 Z" fill="#EF4444"/> <!-- 尻尾 -->
+              <!-- エビフライ2 -->
+              <path d="M 145,122 Q 170,102 190,112 Q 175,127 145,122 Z" fill="#F59E0B" stroke="#D97706" stroke-width="2"/>
+              <path d="M 190,112 L 200,107 L 195,117 Z" fill="#EF4444"/>
+              <!-- タルタルソース -->
+              <ellipse cx="165" cy="115" rx="10" ry="5" fill="#FFFFFF"/>
+            </g>
+          `;
+          break;
+
+        case 17: // テリヤキマヨハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase}
+            <!-- ツヤツヤテリヤキソース -->
+            <ellipse cx="150" cy="120" rx="48" ry="24" fill="#291409"/>
+            <ellipse cx="150" cy="118" rx="42" ry="20" fill="#42200D"/>
+            <!-- 網目状マヨネーズ -->
+            <path d="M 120,110 L 180,130 M 115,120 L 175,140 M 130,105 L 190,125" stroke="#FEF08A" stroke-width="3" stroke-linecap="round"/>
+            <path d="M 180,110 L 120,130 M 185,120 L 125,140 M 170,105 L 110,125" stroke="#FEF08A" stroke-width="3" stroke-linecap="round"/>
+          `;
+          break;
+
+        case 18: // ガーリックバターハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies} ${pattyBase} ${demiGlaceSauce}
+            <!-- とろけるガーリックバター -->
+            <rect x="140" y="105" width="20" height="14" rx="3" fill="#FEF08A" stroke="#FACC15" stroke-width="2"/>
+            <path d="M 135,115 Q 150,125 165,115" fill="#FEF08A" opacity="0.8"/>
+            <!-- 香ばしいガーリックチップ -->
+            <ellipse cx="125" cy="118" rx="5" ry="3" fill="#D97706" transform="rotate(20 125 118)"/>
+            <ellipse cx="172" cy="116" rx="6" ry="3" fill="#B45309" transform="rotate(-15 172 116)"/>
+            <ellipse cx="145" cy="125" rx="5" ry="2" fill="#D97706"/>
+          `;
+          break;
+
+        case 19: // ダブルチーズINハンバーグ
+          specificElements = `
+            ${woodBase} ${ironSkillet} ${sideVeggies}
+            <!-- 下段ハンバーグ -->
+            <g transform="translate(0, 8)">
+              ${pattyBase}
+            </g>
+            <!-- 間からあふれるチーズ -->
+            <ellipse cx="150" cy="122" rx="46" ry="12" fill="#FACC15"/>
+            <!-- 上段ハンバーグ -->
+            <g transform="translate(0, -12)">
+              ${pattyBase} ${demiGlaceSauce}
+            </g>
+            <!-- たっぷりダブルチーズ掛け -->
+            <path d="M 120,110 Q 150,125 180,110 Q 170,135 150,138 Q 130,135 120,110 Z" fill="#F59E0B" opacity="0.85"/>
+          `;
+          break;
+
+        case 20: // キッズハンバーグプレート
+          return `
+            <svg viewBox="0 0 300 180" class="w-full h-full">
+              <!-- お子様プレート（ランチプレート皿） -->
+              <ellipse cx="150" cy="110" rx="135" ry="60" fill="#38BDF8" stroke="#0284C7" stroke-width="4"/>
+              <ellipse cx="150" cy="106" rx="125" ry="52" fill="#FFFFFF"/>
+              <!-- 仕切りライン -->
+              <path d="M 150,60 L 150,150" stroke="#E2E8F0" stroke-width="3" stroke-dasharray="4"/>
+              
+              <!-- 左側：ご飯と日の丸の旗 -->
+              <ellipse cx="90" cy="115" rx="35" ry="22" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="2"/>
+              <!-- 日本の国旗 -->
+              <line x1="90" y1="110" x2="90" y2="70" stroke="#94A3B8" stroke-width="3"/>
+              <rect x="90" y="70" width="25" height="16" fill="#FFFFFF" stroke="#CBD5E1"/>
+              <circle cx="102.5" cy="78" r="5" fill="#EF4444"/>
+
+              <!-- 右側：ミニハンバーグ -->
+              <ellipse cx="195" cy="100" rx="32" ry="18" fill="#52230A"/>
+              <ellipse cx="195" cy="98" rx="28" ry="14" fill="#78350F"/>
+              <path d="M 175,100 Q 195,110 215,100 Q 200,106 195,106 Q 185,106 175,100 Z" fill="#FEF08A"/>
+
+              <!-- ニコニコポテト -->
+              <circle cx="180" cy="128" r="11" fill="#FDE047" stroke="#EAB308" stroke-width="1.5"/>
+              <circle cx="176" cy="125" r="1.5" fill="#713F12"/>
+              <circle cx="184" cy="125" r="1.5" fill="#713F12"/>
+              <path d="M 176,131 Q 180,135 184,131" stroke="#713F12" stroke-width="1.5" fill="none"/>
+
+              <!-- ゼリー -->
+              <path d="M 220,132 L 225,115 L 240,115 L 245,132 Z" fill="#EC4899" stroke="#DB2777"/>
+            </svg>
+          `;
+      }
+
+      return `
+        <svg viewBox="0 0 300 180" class="w-full h-full">
+          ${specificElements}
+        </svg>
+      `;
+    }
+
+    // ハンバーグイラストを画面に更新する関数
+    function updateFloorView(floorNum) {
+      const data = floorsData[floorNum];
+      const viewEl = document.getElementById('floor-view');
+      const container = document.getElementById('svg-illustration-container');
+
+      if (container) {
+        container.innerHTML = generateHamburgSVG(floorNum);
+      }
+
+      document.getElementById('floor-title').innerText = `${floorNum}かい：${data.name}`;
+      document.getElementById('floor-desc').innerText = data.desc;
+      viewEl.className = `absolute inset-0 flex flex-col items-center justify-center p-3 text-center transition-all duration-500 ${data.bg}`;
+    }
+
+    // ゲーム開始
+    function startGame() {
+      initAudio();
+      document.getElementById('start-overlay').classList.add('hidden');
+      updateFloorView(11);
+      setTimeout(() => {
+        openDoors();
+        nextQuiz();
+      }, 500);
+    }
+
+    function playBeep(freq = 800, duration = 0.1, type = 'sine') {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.error("Audio Error", e);
+      }
+    }
+
+    function playChime() {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        const gain2 = audioCtx.createGain();
+
+        osc1.frequency.setValueAtTime(659.25, now);
+        gain1.gain.setValueAtTime(0.2, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+        osc2.frequency.setValueAtTime(523.25, now + 0.4);
+        gain2.gain.setValueAtTime(0.2, now + 0.4);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 1.2);
+        osc2.start(now + 0.4);
+        osc2.stop(now + 1.6);
+      } catch (e) {
+        console.error("Chime Error", e);
+      }
+    }
+
+    // 不正解時のブザー音効果音
+    function playErrorSound() {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(140, now + 0.12);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } catch (e) {
+        console.error("Error Sound Error", e);
+      }
+    }
+
+    function speakText(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'ja-JP';
+        utter.rate = 1.0;
+        utter.pitch = 1.2;
+        window.speechSynthesis.speak(utter);
+      }
+    }
+
+    function nextQuiz() {
+      let nextTarget;
+      do {
+        nextTarget = Math.floor(Math.random() * 10) + 11;
+      } while (nextTarget === currentFloor && Math.random() > 0.2);
+
+      quizTarget = nextTarget;
+      const instruction = `「${quizTarget}」かい を おしてね！`;
+      document.getElementById('quiz-instruction').innerText = instruction;
+      document.getElementById('status-message').innerText = instruction;
+      speakText(`${quizTarget}階を押してね！`);
+    }
+
+    function pressButton(floorNum) {
+      playBeep(900, 0.08);
+
+      if (isMoving) return;
+
+      if (floorNum !== quizTarget) {
+        playErrorSound();
+        speakText(`ちがうよ！${quizTarget}かいをおしてね！`);
+        document.getElementById('status-message').innerText = `❌ ちがうよ！ ${quizTarget}かい を おしてね！`;
+        const btn = document.getElementById(`btn-${floorNum}`);
+        btn.classList.add('animate-bounce');
+        setTimeout(() => btn.classList.remove('animate-bounce'), 500);
+        return;
+      } else {
+        document.getElementById('status-message').innerText = "⭕ せいかい！エレベーターがうごくよ！";
+      }
+
+      highlightButton(floorNum);
+
+      if (floorNum === currentFloor) {
+        speakText(`${floorNum}階です。ドアが開きます。`);
+        openDoors();
+        setTimeout(nextQuiz, 3000);
+        return;
+      }
+
+      moveToFloor(floorNum);
+    }
+
+    function highlightButton(floorNum) {
+      for (let i = 11; i <= 20; i++) {
+        const btn = document.getElementById(`btn-${i}`);
+        if (btn) {
+          if (i === floorNum) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        }
+      }
+    }
+
+    async function moveToFloor(target) {
+      isMoving = true;
+      targetFloor = target;
+
+      await closeDoors();
+
+      const isUp = target > currentFloor;
+      const arrowEl = document.getElementById('direction-arrow');
+      arrowEl.innerText = isUp ? '▲' : '▼';
+      arrowEl.classList.remove('opacity-30');
+      arrowEl.classList.add('opacity-100', 'animate-pulse');
+
+      document.getElementById('status-message').innerText = `${target}かい に むかっています...`;
+      speakText(`${target}階へまいります。`);
+
+      const step = isUp ? 1 : -1;
+      while (currentFloor !== target) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        currentFloor += step;
+        
+        document.getElementById('display-number').innerText = currentFloor;
+        document.getElementById('floor-name-display').innerText = floorsData[currentFloor].name;
+        playBeep(400, 0.05);
+      }
+
+      arrowEl.classList.add('opacity-30');
+      arrowEl.classList.remove('opacity-100', 'animate-pulse');
+      
+      updateFloorView(currentFloor);
+
+      playChime();
+      document.getElementById('status-message').innerText = `🎉 ${currentFloor}かい に とうちゃく！`;
+      speakText(`${currentFloor}階、${floorsData[currentFloor].name} です。`);
+
+      await new Promise(resolve => setTimeout(resolve, 600));
+      await openDoors();
+
+      highlightButton(null);
+      isMoving = false;
+
+      setTimeout(() => {
+        nextQuiz();
+      }, 3500);
+    }
+
+    function openDoors() {
+      return new Promise(resolve => {
+        playBeep(300, 0.2, 'sawtooth');
+        const container = document.getElementById('doors-container');
+        container.classList.add('doors-open');
+        setTimeout(resolve, 1200);
+      });
+    }
+
+    function closeDoors() {
+      return new Promise(resolve => {
+        playBeep(250, 0.2, 'sawtooth');
+        const container = document.getElementById('doors-container');
+        container.classList.remove('doors-open');
+        setTimeout(resolve, 1200);
+      });
+    }
+
+    function manualDoorOpen() {
+      if (isMoving) return;
+      playBeep(700, 0.05);
+      openDoors();
+      speakText("ドアが開きます");
+    }
+
+    function manualDoorClose() {
+      if (isMoving) return;
+      playBeep(700, 0.05);
+      closeDoors();
+      speakText("ドアが閉まります");
+    }
+  </script>
+</body>
+</html>
